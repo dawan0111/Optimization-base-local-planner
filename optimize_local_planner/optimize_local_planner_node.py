@@ -35,12 +35,8 @@ class OptimizeLocalPlannerNode(Node):
 
     def get_cost(self, x):
         goal_cost = self.get_goal_cost(x)
-
-        # self.get_logger().info("goal cost: {}".format(goal_cost))
-        return goal_cost
-
-    def get_goal_gradient(self):
-        pass
+        velocity_cost = self.get_velocity_cost(x)
+        return goal_cost + velocity_cost
 
     def get_goal_cost(self, input_velocity):
         x_k = self.robot_position[0]
@@ -55,6 +51,12 @@ class OptimizeLocalPlannerNode(Node):
         loss = self.goal - A
 
         return loss.T @ loss
+    
+    def get_velocity_cost(self, input_velocity):
+        diff_linear = (self.linear_velocity - input_velocity[0]) ** 2
+        diff_angular = (self.angular_velocity - input_velocity[1]) ** 2
+        
+        return diff_linear + diff_angular
         
     def odom_callback_(self, odom_data: Odometry):
         self.odom_data_ = odom_data
