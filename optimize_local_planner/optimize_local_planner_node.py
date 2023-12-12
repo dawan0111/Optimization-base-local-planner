@@ -5,6 +5,7 @@ import numpy as np
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
 
 class OptimizeLocalPlannerNode(Node):
@@ -17,7 +18,7 @@ class OptimizeLocalPlannerNode(Node):
         self.scan_data_: LaserScan = None
         self.odom_data_: Odometry = None
 
-        self.linear_velocity = -1.0
+        self.linear_velocity = 1.0
         self.angular_velocity = 0.0
 
         # world frame position
@@ -27,13 +28,18 @@ class OptimizeLocalPlannerNode(Node):
     def control_callback_(self):
         if self.scan_data_ is None or self.odom_data_ is None:
             return
-        self.get_cost(self.linear_velocity, self.angular_velocity)
+        x0 = np.array([self.linear_velocity, self.angular_velocity])
+        res = minimize(self.get_cost, x0, method='nelder-mead', options={'xatol': 1e-8, 'disp': True})
+        self.get_logger().info("x: {}".format(res.x))
+        # self.get_cost(self.linear_velocity, self.angular_velocity)
 
-    def get_cost(self, linear_velocity, angular_velocity):
-        input_velocity = np.array([linear_velocity, angular_velocity]).reshape(2, 1)
-        goal_cost = self.get_goal_cost(input_velocity) * 10
+    def get_cost(self, x):
+        goal_cost = self.get_goal_cost(x)
 
-        self.get_logger().info("goal cost: {}".format(goal_cost))
+        # self.get_logger().info("goal cost: {}".format(goal_cost))
+        return goal_cost
+
+    def get_goal_gradient(self):
         pass
 
     def get_goal_cost(self, input_velocity):
@@ -42,11 +48,11 @@ class OptimizeLocalPlannerNode(Node):
         yaw_k = self.robot_yaw
 
         A = np.array([
-            x_k / input_velocity[0] + math.cos(yaw_k + input_velocity[1] * self.dt) * self.dt, 0,
-            y_k / input_velocity[0] + math.sin(yaw_k + input_velocity[1] * self.dt) * self.dt, 0
-        ]).reshape(2, 2)
+            x_k + math.cos(yaw_k + input_velocity[1] * self.dt) * self.dt * input_velocity[0],
+            y_k + math.sin(yaw_k + input_velocity[1] * self.dt) * self.dt * input_velocity[0],
+        ]).reshape(2, 1)
 
-        loss = self.goal - A @ input_velocity
+        loss = self.goal - A
 
         return loss.T @ loss
         
